@@ -1,81 +1,49 @@
 import axios from "axios";
+import { getAgeGroup, getTopCountry } from "./utils.js";
 
-export default async function handler(req, res) {
-  // Allow only GET requests
-  if (req.method !== "GET") {
-    return res.status(405).json({
-      status: "error",
-      message: "Method not allowed",
-    });
-  }
-
+export async function classifyName(name) {
   try {
-    const { name } = req.query;
+    const [genderRes, ageRes, nationRes] = await Promise.all([
+      axios.get(`https://api.genderize.io?name=${name}`),
+      axios.get(`https://api.agify.io?name=${name}`),
+      axios.get(`https://api.nationalize.io?name=${name}`),
+    ]);
 
-    // Validate input
-    if (!name || name === "") {
-      return res.status(400).json({
-        status: "error",
-        message: "Missing or empty name parameter",
-      });
+    const genderData = genderRes.data;
+    const ageData = ageRes.data;
+    const nationData = nationRes.data;
+
+    // ❌ Edge cases
+    if (!genderData.gender || genderData.count === 0) {
+      throw new Error("Genderize");
     }
 
-    if (typeof name !== "string") {
-      return res.status(422).json({
-        status: "error",
-        message: "Name must be a string",
-      });
+    if (ageData.age === null) {
+      throw new Error("Agify");
     }
 
-    // Call external API
-    const response = await axios.get(
-      `https://api.genderize.io?name=${encodeURIComponent(name)}`
-    );
-
-    const { gender, probability, count } = response.data;
-
-    // Handle no prediction
-    if (gender === null || count === 0) {
-      return res.status(200).json({
-        status: "error",
-        message: "No prediction available for the provided name",
-      });
+    const topCountry = getTopCountry(nationData.country);
+    if (!topCountry) {
+      throw new Error("Nationalize");
     }
 
-    // Process data
-    const sample_size = count;
-
-    const is_confident =
-      probability >= 0.7 && sample_size >= 100;
-
-    const processed_at = new Date().toISOString();
-
-    // Send response
-    return res.status(200).json({
-      status: "success",
-      data: {
-        name: name.toLowerCase(),
-        gender,
-        probability,
-        sample_size,
-        is_confident,
-        processed_at,
-      },
-    });
-
-  } catch (error) {
-    // Handle API errors
-    if (error.response) {
-      return res.status(502).json({
-        status: "error",
-        message: "Upstream API error",
-      });
+    return {
+      gender: genderData.gender,
+      gender_probability: genderData.probability,
+      sample_size: genderData.count,
+      age: ageData.age,
+      age_group: getAgeGroup(ageData.age),
+      country_id: topCountry.country_id,
+      country_probability: topCountry.probability,
+    };
+  } catch (err) {
+    if (["Genderize", "Agify", "Nationalize"].includes(err.message)) {
+      throw {
+        status: 502,
+        message: `${err.message} returned an invalid response`,
+      };
     }
 
-    return res.status(500).json({
-      status: "error",
-      message: "Internal server error",
-    });
+    throw { status: 500, message: "Server error" };
   }
 }
-
