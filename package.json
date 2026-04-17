@@ -1,0 +1,16 @@
+{
+  "name": "stage_0",
+  "version": "1.0.0",
+  "description": "api integration for gender",
+  "license": "ISC",
+  "author": "nezianya9",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.15.0"
+  }
+}
